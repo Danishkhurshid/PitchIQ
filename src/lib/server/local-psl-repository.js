@@ -118,6 +118,17 @@ function toPlayerLabel(player) {
     : null;
 }
 
+function toVenueLabel(venue) {
+  return venue
+    ? {
+        id: venue.venue_id,
+        name: venue.venue_name,
+        slug: venue.slug,
+        city: venue.city
+      }
+    : null;
+}
+
 function resolveSeason(season, latestSeason) {
   if (!season || season === "all") {
     return null;
@@ -130,13 +141,25 @@ function resolveSeason(season, latestSeason) {
   return season;
 }
 
-function applyMatchFilters(matches, { season, teamId }) {
+function matchInSeason(match, season) {
+  if (!season) {
+    return true;
+  }
+
+  return match?.season === season;
+}
+
+function applyMatchFilters(matches, { season, teamId, venueId }) {
   return matches.filter((match) => {
     if (season && match.season !== season) {
       return false;
     }
 
     if (teamId && match.team_1_id !== teamId && match.team_2_id !== teamId) {
+      return false;
+    }
+
+    if (venueId && match.venue_id !== venueId) {
       return false;
     }
 
@@ -498,6 +521,427 @@ function aggregateDismissalsByPhase(rows, context) {
     .sort(phaseSort);
 }
 
+function emptyBattingSummaryRow() {
+  return {
+    matches: 0,
+    innings: 0,
+    batting: finalizeBattingTotals(createBattingAccumulator())
+  };
+}
+
+function emptyBowlingSummaryRow() {
+  return {
+    matches: 0,
+    innings: 0,
+    bowling: finalizeBowlingTotals(createBowlingAccumulator())
+  };
+}
+
+function sortRowsByMatchDate(rows, context) {
+  return [...rows].sort((a, b) => {
+    const matchA = context.matchById.get(a.match_id);
+    const matchB = context.matchById.get(b.match_id);
+
+    if (!matchA && !matchB) {
+      return Number(b.match_id) - Number(a.match_id);
+    }
+
+    if (!matchA) {
+      return 1;
+    }
+
+    if (!matchB) {
+      return -1;
+    }
+
+    return matchSort(matchA, matchB);
+  });
+}
+
+function buildBattingFormWindow(rows, context, limit) {
+  const recentRows = sortRowsByMatchDate(rows, context).slice(0, limit);
+  const totals = createBattingAccumulator();
+
+  for (const row of recentRows) {
+    addBattingTotals(totals, row);
+  }
+
+  const bestEntry = recentRows.reduce((best, row) => {
+    if (!best || row.runs > best.runs) {
+      return row;
+    }
+
+    if (row.runs === best.runs && row.balls_faced < best.balls_faced) {
+      return row;
+    }
+
+    return best;
+  }, null);
+
+  return {
+    innings: recentRows.length,
+    summary: finalizeBattingTotals(totals),
+    fifties: recentRows.filter((row) => row.runs >= 50).length,
+    bestScore: bestEntry
+      ? {
+          runs: bestEntry.runs,
+          ballsFaced: bestEntry.balls_faced,
+          matchId: bestEntry.match_id
+        }
+      : null,
+    scores: recentRows.map((row) => ({
+      matchId: row.match_id,
+      matchDate: context.matchById.get(row.match_id)?.match_date || null,
+      opposition: toTeamLabel(context.teamById.get(row.opposition_team_id)),
+      runs: row.runs,
+      ballsFaced: row.balls_faced,
+      strikeRate: row.strike_rate,
+      dismissed: row.dismissals > 0
+    }))
+  };
+}
+
+function buildBowlingFormWindow(rows, context, limit) {
+  const recentRows = sortRowsByMatchDate(rows, context).slice(0, limit);
+  const totals = createBowlingAccumulator();
+
+  for (const row of recentRows) {
+    addBowlingTotals(totals, row);
+  }
+
+  const bestEntry = recentRows.reduce((best, row) => {
+    if (!best || row.wickets > best.wickets) {
+      return row;
+    }
+
+    if (row.wickets === best.wickets && row.runs_conceded < best.runs_conceded) {
+      return row;
+    }
+
+    return best;
+  }, null);
+
+  return {
+    innings: recentRows.length,
+    summary: finalizeBowlingTotals(totals),
+    bestSpell: bestEntry
+      ? {
+          wickets: bestEntry.wickets,
+          runsConceded: bestEntry.runs_conceded,
+          ballsBowled: bestEntry.balls_bowled,
+          matchId: bestEntry.match_id
+        }
+      : null,
+    spells: recentRows.map((row) => ({
+      matchId: row.match_id,
+      matchDate: context.matchById.get(row.match_id)?.match_date || null,
+      opposition: toTeamLabel(context.teamById.get(row.opposition_team_id)),
+      wickets: row.wickets,
+      runsConceded: row.runs_conceded,
+      ballsBowled: row.balls_bowled,
+      economy: row.economy
+    }))
+  };
+}
+
+function addBattingDeliveryTotals(target, delivery) {
+  target.runs += delivery.batter_runs || 0;
+
+  if (delivery.wides === 0) {
+    target.ballsFaced += 1;
+  }
+
+  if (delivery.batter_runs === 4) {
+    target.fours += 1;
+  }
+
+  if (delivery.batter_runs === 6) {
+    target.sixes += 1;
+  }
+
+  if (delivery.is_dot_ball) {
+    target.dotBalls += 1;
+  }
+}
+
+function addBowlingDeliveryTotals(target, delivery) {
+  if (delivery.is_legal_ball) {
+    target.ballsBowled += 1;
+  }
+
+  target.runsConceded += delivery.batter_runs + delivery.wides + delivery.noballs;
+
+  if (delivery.is_dot_ball) {
+    target.dotBalls += 1;
+  }
+}
+
+function buildGroupedBattingSplits(rows, context, keyResolver, labelResolver, fieldName) {
+  const grouped = new Map();
+
+  for (const row of rows) {
+    const key = keyResolver(row);
+
+    if (!key) {
+      continue;
+    }
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        key,
+        matches: new Set(),
+        innings: 0,
+        totals: createBattingAccumulator()
+      });
+    }
+
+    const current = grouped.get(key);
+    current.matches.add(row.match_id);
+    current.innings += row.innings || 0;
+    addBattingTotals(current.totals, row);
+  }
+
+  return [...grouped.values()]
+    .map((entry) => ({
+      [fieldName]: labelResolver(entry.key),
+      matches: entry.matches.size,
+      innings: entry.innings,
+      batting: finalizeBattingTotals(entry.totals)
+    }))
+    .filter((entry) => entry[fieldName])
+    .sort((a, b) => {
+      if (b.batting.runs !== a.batting.runs) {
+        return b.batting.runs - a.batting.runs;
+      }
+
+      return (b.batting.strikeRate || 0) - (a.batting.strikeRate || 0);
+    });
+}
+
+function buildGroupedBowlingSplits(rows, context, keyResolver, labelResolver, fieldName) {
+  const grouped = new Map();
+
+  for (const row of rows) {
+    const key = keyResolver(row);
+
+    if (!key) {
+      continue;
+    }
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        key,
+        matches: new Set(),
+        innings: 0,
+        totals: createBowlingAccumulator()
+      });
+    }
+
+    const current = grouped.get(key);
+    current.matches.add(row.match_id);
+    current.innings += row.innings || 0;
+    addBowlingTotals(current.totals, row);
+  }
+
+  return [...grouped.values()]
+    .map((entry) => ({
+      [fieldName]: labelResolver(entry.key),
+      matches: entry.matches.size,
+      innings: entry.innings,
+      bowling: finalizeBowlingTotals(entry.totals)
+    }))
+    .filter((entry) => entry[fieldName])
+    .sort((a, b) => {
+      if (b.bowling.wickets !== a.bowling.wickets) {
+        return b.bowling.wickets - a.bowling.wickets;
+      }
+
+      return (
+        (a.bowling.economy || Number.MAX_SAFE_INTEGER) -
+        (b.bowling.economy || Number.MAX_SAFE_INTEGER)
+      );
+    });
+}
+
+function buildPlayerBattingOpponentSplits(rows, context) {
+  return buildGroupedBattingSplits(
+    rows,
+    context,
+    (row) => row.opposition_team_id,
+    (teamId) => toTeamLabel(context.teamById.get(teamId)),
+    "team"
+  );
+}
+
+function buildPlayerBowlingOpponentSplits(rows, context) {
+  return buildGroupedBowlingSplits(
+    rows,
+    context,
+    (row) => row.opposition_team_id,
+    (teamId) => toTeamLabel(context.teamById.get(teamId)),
+    "team"
+  );
+}
+
+function buildPlayerBattingVenueSplits(rows, context) {
+  return buildGroupedBattingSplits(
+    rows,
+    context,
+    (row) => context.matchById.get(row.match_id)?.venue_id || null,
+    (venueId) => toVenueLabel(context.venueById.get(venueId)),
+    "venue"
+  );
+}
+
+function buildPlayerBowlingVenueSplits(rows, context) {
+  return buildGroupedBowlingSplits(
+    rows,
+    context,
+    (row) => context.matchById.get(row.match_id)?.venue_id || null,
+    (venueId) => toVenueLabel(context.venueById.get(venueId)),
+    "venue"
+  );
+}
+
+function buildBatterVsBowlerMatchups(context, { playerId, season }) {
+  const grouped = new Map();
+
+  for (const delivery of context.deliveries) {
+    if (delivery.striker_player_id !== playerId || !delivery.bowler_player_id) {
+      continue;
+    }
+
+    const match = context.matchById.get(delivery.match_id);
+    if (!matchInSeason(match, season)) {
+      continue;
+    }
+
+    if (!grouped.has(delivery.bowler_player_id)) {
+      grouped.set(delivery.bowler_player_id, {
+        bowlerId: delivery.bowler_player_id,
+        matches: new Set(),
+        totals: createBattingAccumulator()
+      });
+    }
+
+    const current = grouped.get(delivery.bowler_player_id);
+    current.matches.add(delivery.match_id);
+    addBattingDeliveryTotals(current.totals, delivery);
+  }
+
+  for (const wicket of context.wickets) {
+    if (
+      wicket.player_out_id !== playerId ||
+      !wicket.bowler_player_id ||
+      !wicket.counts_as_dismissal ||
+      !wicket.credited_to_bowler
+    ) {
+      continue;
+    }
+
+    const match = context.matchById.get(wicket.match_id);
+    if (!matchInSeason(match, season)) {
+      continue;
+    }
+
+    if (!grouped.has(wicket.bowler_player_id)) {
+      grouped.set(wicket.bowler_player_id, {
+        bowlerId: wicket.bowler_player_id,
+        matches: new Set(),
+        totals: createBattingAccumulator()
+      });
+    }
+
+    const current = grouped.get(wicket.bowler_player_id);
+    current.matches.add(wicket.match_id);
+    current.totals.dismissals += 1;
+  }
+
+  return [...grouped.values()]
+    .map((entry) => ({
+      player: toPlayerLabel(context.playerById.get(entry.bowlerId)),
+      matches: entry.matches.size,
+      batting: finalizeBattingTotals(entry.totals)
+    }))
+    .filter((entry) => entry.player && entry.batting.ballsFaced > 0)
+    .sort((a, b) => {
+      if (b.batting.ballsFaced !== a.batting.ballsFaced) {
+        return b.batting.ballsFaced - a.batting.ballsFaced;
+      }
+
+      return b.batting.dismissals - a.batting.dismissals;
+    });
+}
+
+function buildBowlerVsBatterMatchups(context, { playerId, season }) {
+  const grouped = new Map();
+
+  for (const delivery of context.deliveries) {
+    if (delivery.bowler_player_id !== playerId || !delivery.striker_player_id) {
+      continue;
+    }
+
+    const match = context.matchById.get(delivery.match_id);
+    if (!matchInSeason(match, season)) {
+      continue;
+    }
+
+    if (!grouped.has(delivery.striker_player_id)) {
+      grouped.set(delivery.striker_player_id, {
+        batterId: delivery.striker_player_id,
+        matches: new Set(),
+        totals: createBowlingAccumulator()
+      });
+    }
+
+    const current = grouped.get(delivery.striker_player_id);
+    current.matches.add(delivery.match_id);
+    addBowlingDeliveryTotals(current.totals, delivery);
+  }
+
+  for (const wicket of context.wickets) {
+    if (
+      wicket.bowler_player_id !== playerId ||
+      !wicket.player_out_id ||
+      !wicket.credited_to_bowler
+    ) {
+      continue;
+    }
+
+    const match = context.matchById.get(wicket.match_id);
+    if (!matchInSeason(match, season)) {
+      continue;
+    }
+
+    if (!grouped.has(wicket.player_out_id)) {
+      grouped.set(wicket.player_out_id, {
+        batterId: wicket.player_out_id,
+        matches: new Set(),
+        totals: createBowlingAccumulator()
+      });
+    }
+
+    const current = grouped.get(wicket.player_out_id);
+    current.matches.add(wicket.match_id);
+    current.totals.wickets += 1;
+  }
+
+  return [...grouped.values()]
+    .map((entry) => ({
+      player: toPlayerLabel(context.playerById.get(entry.batterId)),
+      matches: entry.matches.size,
+      bowling: finalizeBowlingTotals(entry.totals)
+    }))
+    .filter((entry) => entry.player && entry.bowling.ballsBowled > 0)
+    .sort((a, b) => {
+      if (b.bowling.ballsBowled !== a.bowling.ballsBowled) {
+        return b.bowling.ballsBowled - a.bowling.ballsBowled;
+      }
+
+      return b.bowling.wickets - a.bowling.wickets;
+    });
+}
+
 function deliveryKey(matchId, inningsNumber, inningsBallIndex) {
   return `${matchId}:${inningsNumber}:${inningsBallIndex}`;
 }
@@ -611,7 +1055,7 @@ function decorateMatch(match, context) {
     season: match.season,
     matchDate: match.match_date,
     stage: match.event_stage,
-    venue: context.venueById.get(match.venue_id) || null,
+    venue: toVenueLabel(context.venueById.get(match.venue_id)),
     teams: {
       home: toTeamLabel(context.teamById.get(match.team_1_id)),
       away: toTeamLabel(context.teamById.get(match.team_2_id))
@@ -743,6 +1187,129 @@ function buildTeamSummaries(context, filters) {
     });
 }
 
+function buildVenueSummaries(context, filters) {
+  const matches = applyMatchFilters(context.matches, filters);
+  const inningsByMatch = new Map();
+
+  for (const row of context.innings) {
+    if (!inningsByMatch.has(row.match_id)) {
+      inningsByMatch.set(row.match_id, []);
+    }
+
+    inningsByMatch.get(row.match_id).push(row);
+  }
+
+  const summaries = new Map();
+
+  for (const match of matches) {
+    const venue = context.venueById.get(match.venue_id);
+
+    if (!venue) {
+      continue;
+    }
+
+    if (!summaries.has(match.venue_id)) {
+      summaries.set(match.venue_id, {
+        venue,
+        matches: 0,
+        recentMatchDate: null,
+        firstInningsRuns: 0,
+        firstInningsCount: 0,
+        secondInningsRuns: 0,
+        secondInningsCount: 0,
+        chaseWins: 0,
+        defendWins: 0,
+        tossField: 0,
+        tossBat: 0,
+        highestTotal: null
+      });
+    }
+
+    const current = summaries.get(match.venue_id);
+    current.matches += 1;
+
+    if (!current.recentMatchDate || match.match_date > current.recentMatchDate) {
+      current.recentMatchDate = match.match_date;
+    }
+
+    if (match.toss_decision === "field") {
+      current.tossField += 1;
+    }
+
+    if (match.toss_decision === "bat") {
+      current.tossBat += 1;
+    }
+
+    const innings = [...(inningsByMatch.get(match.match_id) || [])].sort(
+      (a, b) => a.innings_number - b.innings_number
+    );
+    const firstInnings = innings[0];
+    const secondInnings = innings[1];
+
+    if (firstInnings) {
+      current.firstInningsRuns += firstInnings.total_runs;
+      current.firstInningsCount += 1;
+    }
+
+    if (secondInnings) {
+      current.secondInningsRuns += secondInnings.total_runs;
+      current.secondInningsCount += 1;
+    }
+
+    for (const inningsEntry of innings) {
+      if (!current.highestTotal || inningsEntry.total_runs > current.highestTotal.runs) {
+        current.highestTotal = {
+          runs: inningsEntry.total_runs,
+          wickets: inningsEntry.total_wickets,
+          team: toTeamLabel(context.teamById.get(inningsEntry.batting_team_id)),
+          matchId: match.match_id
+        };
+      }
+    }
+
+    if (
+      match.result_type !== "no result" &&
+      match.result_label !== "tie" &&
+      match.winner_team_id
+    ) {
+      if (firstInnings && match.winner_team_id === firstInnings.batting_team_id) {
+        current.defendWins += 1;
+      } else if (secondInnings && match.winner_team_id === secondInnings.batting_team_id) {
+        current.chaseWins += 1;
+      }
+    }
+  }
+
+  return [...summaries.values()]
+    .map((entry) => {
+      const completedOutcomes = entry.chaseWins + entry.defendWins;
+
+      return {
+        venue: toVenueLabel(entry.venue),
+        recentMatchDate: entry.recentMatchDate,
+        summary: {
+          matches: entry.matches,
+          averageFirstInningsScore: rate(entry.firstInningsRuns, entry.firstInningsCount),
+          averageSecondInningsScore: rate(entry.secondInningsRuns, entry.secondInningsCount),
+          chaseWins: entry.chaseWins,
+          defendWins: entry.defendWins,
+          chaseWinPct: rate(entry.chaseWins, completedOutcomes, 100),
+          defendWinPct: rate(entry.defendWins, completedOutcomes, 100),
+          tossFieldPct: rate(entry.tossField, entry.matches, 100),
+          tossBatPct: rate(entry.tossBat, entry.matches, 100),
+          highestTotal: entry.highestTotal
+        }
+      };
+    })
+    .sort((a, b) => {
+      if (b.summary.matches !== a.summary.matches) {
+        return b.summary.matches - a.summary.matches;
+      }
+
+      return (b.summary.averageFirstInningsScore || 0) - (a.summary.averageFirstInningsScore || 0);
+    });
+}
+
 async function buildContext() {
   const [
     manifest,
@@ -821,6 +1388,87 @@ export function createLocalPslRepository() {
     async getManifest() {
       const context = await getContext();
       return context.manifest;
+    },
+
+    async listVenues(options = {}) {
+      const context = await getContext();
+      const season = resolveSeason(options.season, context.latestSeason);
+      return buildVenueSummaries(context, { season, venueId: options.venueId || null });
+    },
+
+    async getVenue(venueId, options = {}) {
+      const context = await getContext();
+      const season = resolveSeason(options.season, context.latestSeason);
+      const venue = context.venueById.get(venueId);
+
+      if (!venue) {
+        return null;
+      }
+
+      const matches = applyMatchFilters(context.matches, {
+        season,
+        venueId
+      }).map((match) => decorateMatch(match, context));
+      const summary = buildVenueSummaries(context, { season, venueId })[0]?.summary || {
+        matches: 0,
+        averageFirstInningsScore: null,
+        averageSecondInningsScore: null,
+        chaseWins: 0,
+        defendWins: 0,
+        chaseWinPct: null,
+        defendWinPct: null,
+        tossFieldPct: null,
+        tossBatPct: null,
+        highestTotal: null
+      };
+      const teamLeaders = buildTeamSummaries(context, { season, venueId }).slice(0, 6);
+      const allowedMatchIds = new Set(matches.map((match) => match.matchId));
+
+      const battingLeaders = aggregatePlayerBattingRows(
+        context.playerMatchBatting.filter(
+          (row) => allowedMatchIds.has(row.match_id) && (!season || row.season === season)
+        )
+      )
+        .map((row) => ({
+          player: toPlayerLabel(context.playerById.get(row.playerId)),
+          matches: row.matches,
+          innings: row.innings,
+          batting: row.batting
+        }))
+        .sort((a, b) => b.batting.runs - a.batting.runs)
+        .slice(0, 8);
+
+      const bowlingLeaders = aggregatePlayerBowlingRows(
+        context.playerMatchBowling.filter(
+          (row) => allowedMatchIds.has(row.match_id) && (!season || row.season === season)
+        )
+      )
+        .map((row) => ({
+          player: toPlayerLabel(context.playerById.get(row.playerId)),
+          matches: row.matches,
+          innings: row.innings,
+          bowling: row.bowling
+        }))
+        .sort((a, b) => {
+          if (b.bowling.wickets !== a.bowling.wickets) {
+            return b.bowling.wickets - a.bowling.wickets;
+          }
+
+          return (a.bowling.economy || Number.MAX_SAFE_INTEGER) - (b.bowling.economy || Number.MAX_SAFE_INTEGER);
+        })
+        .slice(0, 8);
+
+      return {
+        venue: toVenueLabel(venue),
+        season: season || "all",
+        summary,
+        recentMatches: matches.slice(0, Number(options.matchLimit) || 10),
+        leaders: {
+          batting: battingLeaders,
+          bowling: bowlingLeaders,
+          teams: teamLeaders
+        }
+      };
     },
 
     async listTeams(options = {}) {
@@ -1013,6 +1661,8 @@ export function createLocalPslRepository() {
       const bowlingRows = context.playerMatchBowling.filter(
         (row) => row.player_id === playerId && (!season || row.season === season)
       );
+      const allBattingRows = context.playerMatchBatting.filter((row) => row.player_id === playerId);
+      const allBowlingRows = context.playerMatchBowling.filter((row) => row.player_id === playerId);
       const phaseBattingRows = context.playerPhaseBatting.filter(
         (row) => row.player_id === playerId && (!season || row.season === season)
       );
@@ -1020,12 +1670,14 @@ export function createLocalPslRepository() {
         (row) => row.player_id === playerId && (!season || row.season === season)
       );
 
-      const battingSummary =
-        aggregatePlayerBattingRows(battingRows)[0]?.batting ||
-        finalizeBattingTotals(createBattingAccumulator());
-      const bowlingSummary =
-        aggregatePlayerBowlingRows(bowlingRows)[0]?.bowling ||
-        finalizeBowlingTotals(createBowlingAccumulator());
+      const currentBattingSummaryRow =
+        aggregatePlayerBattingRows(battingRows)[0] || emptyBattingSummaryRow();
+      const currentBowlingSummaryRow =
+        aggregatePlayerBowlingRows(bowlingRows)[0] || emptyBowlingSummaryRow();
+      const careerBattingSummaryRow =
+        aggregatePlayerBattingRows(allBattingRows)[0] || emptyBattingSummaryRow();
+      const careerBowlingSummaryRow =
+        aggregatePlayerBowlingRows(allBowlingRows)[0] || emptyBowlingSummaryRow();
 
       const playerMatchIds = unique([
         ...battingRows.map((row) => row.match_id),
@@ -1087,8 +1739,58 @@ export function createLocalPslRepository() {
         teams: teamIds
           .map((teamIdValue) => toTeamLabel(context.teamById.get(teamIdValue)))
           .filter(Boolean),
-        batting: battingSummary,
-        bowling: bowlingSummary,
+        batting: currentBattingSummaryRow.batting,
+        bowling: currentBowlingSummaryRow.bowling,
+        sample: {
+          batting: {
+            matches: currentBattingSummaryRow.matches,
+            innings: currentBattingSummaryRow.innings
+          },
+          bowling: {
+            matches: currentBowlingSummaryRow.matches,
+            innings: currentBowlingSummaryRow.innings
+          }
+        },
+        career: {
+          batting: {
+            matches: careerBattingSummaryRow.matches,
+            innings: careerBattingSummaryRow.innings,
+            ...careerBattingSummaryRow.batting
+          },
+          bowling: {
+            matches: careerBowlingSummaryRow.matches,
+            innings: careerBowlingSummaryRow.innings,
+            ...careerBowlingSummaryRow.bowling
+          }
+        },
+        form: {
+          batting: {
+            last5: buildBattingFormWindow(battingRows, context, 5),
+            last10: buildBattingFormWindow(battingRows, context, 10)
+          },
+          bowling: {
+            last5: buildBowlingFormWindow(bowlingRows, context, 5),
+            last10: buildBowlingFormWindow(bowlingRows, context, 10)
+          }
+        },
+        matchups: {
+          batting: {
+            opposition: buildPlayerBattingOpponentSplits(battingRows, context),
+            venues: buildPlayerBattingVenueSplits(battingRows, context),
+            bowlers: buildBatterVsBowlerMatchups(context, {
+              playerId,
+              season
+            })
+          },
+          bowling: {
+            opposition: buildPlayerBowlingOpponentSplits(bowlingRows, context),
+            venues: buildPlayerBowlingVenueSplits(bowlingRows, context),
+            batters: buildBowlerVsBatterMatchups(context, {
+              playerId,
+              season
+            })
+          }
+        },
         dismissalProfile,
         dismissalByBowler,
         dismissalByPhase,
@@ -1104,9 +1806,10 @@ export function createLocalPslRepository() {
       const context = await getContext();
       const season = resolveSeason(options.season, context.latestSeason);
       const teamId = options.teamId || null;
+      const venueId = options.venueId || null;
       const limit = options.limit === "all" ? null : Number(options.limit) || 20;
 
-      const matches = applyMatchFilters(context.matches, { season, teamId })
+      const matches = applyMatchFilters(context.matches, { season, teamId, venueId })
         .map((match) => decorateMatch(match, context));
 
       return limit ? matches.slice(0, limit) : matches;

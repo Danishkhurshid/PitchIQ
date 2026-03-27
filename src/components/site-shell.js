@@ -16,6 +16,10 @@ const navItems = [
   {
     href: "/matches",
     label: "Matches"
+  },
+  {
+    href: "/venues",
+    label: "Venues"
   }
 ];
 

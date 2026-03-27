@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { PhaseTable } from "@/components/phase-table";
+import { PlayerFormPanel } from "@/components/player-form-panel";
 import { RecentMatchList } from "@/components/recent-match-list";
 import { SeasonFilter } from "@/components/season-filter";
 import { getCricketRepository } from "@/lib/server/cricket-repository";
@@ -183,6 +184,35 @@ export default async function PlayerDetailPage({ params, searchParams }) {
 
       <section className="content-grid">
         <div className="surface surface-span-6">
+          <PlayerFormPanel
+            mode="batting"
+            season={player.season}
+            current={{
+              ...player.batting,
+              matches: player.sample.batting.matches,
+              innings: player.sample.batting.innings
+            }}
+            career={player.career.batting}
+            form={player.form.batting}
+          />
+        </div>
+        <div className="surface surface-span-6">
+          <PlayerFormPanel
+            mode="bowling"
+            season={player.season}
+            current={{
+              ...player.bowling,
+              matches: player.sample.bowling.matches,
+              innings: player.sample.bowling.innings
+            }}
+            career={player.career.bowling}
+            form={player.form.bowling}
+          />
+        </div>
+      </section>
+
+      <section className="content-grid">
+        <div className="surface surface-span-6">
           <PhaseTable
             title="Where this batter is most dangerous"
             items={player.phaseProfile.batting}
@@ -310,6 +340,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
             title="Recent match log"
             items={player.recentMatches}
             showStatline
+            season={selectedSeason}
           />
         </div>
       </section>

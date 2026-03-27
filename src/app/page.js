@@ -127,6 +127,10 @@ export default async function HomePage({ searchParams }) {
               <strong>Matches</strong>
               <span>Scorecards, wicket events, reviews, replacements</span>
             </Link>
+            <Link className="shortcut-card" href={buildPath("/venues", { season: selectedSeason })}>
+              <strong>Venues</strong>
+              <span>Scoring patterns, chase bias, leaders, and local context</span>
+            </Link>
           </div>
         </article>
       </section>
@@ -277,6 +281,7 @@ export default async function HomePage({ searchParams }) {
           <RecentMatchList
             title="Latest match thread"
             items={recentMatches.map((match) => ({ match }))}
+            season={selectedSeason}
           />
         </div>
       </section>

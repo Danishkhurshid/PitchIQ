@@ -152,7 +152,11 @@ export default async function TeamDetailPage({ params, searchParams }) {
 
       <section className="content-grid">
         <div className="surface surface-span-12">
-          <RecentMatchList title="Recent matches" items={team.recentMatches.map((match) => ({ match }))} />
+          <RecentMatchList
+            title="Recent matches"
+            items={team.recentMatches.map((match) => ({ match }))}
+            season={selectedSeason}
+          />
         </div>
       </section>
     </main>

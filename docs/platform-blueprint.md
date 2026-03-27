@@ -8,6 +8,8 @@ through the 2025 season. That is enough to build the analytics layer
 immediately, even before wiring in a live API for current fixtures and
 scorecards.
 
+For the concrete page and feature build order, see `docs/mvp-roadmap.md`.
+
 ## Product Positioning
 
 The product should behave like a cricket intelligence layer, not a stat dump.
