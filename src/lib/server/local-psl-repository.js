@@ -1382,7 +1382,115 @@ async function getContext() {
 
   return contextPromise;
 }
+function buildTeamVenueRecord(context, { teamId, season }) {
+  const grouped = new Map();
+  for (const match of context.matches) {
+    if (match.team_1_id !== teamId && match.team_2_id !== teamId) continue;
+    if (season && match.season !== season) continue;
+    if (!match.venue_id) continue;
+    if (match.result_type !== "win") continue;
 
+    if (!grouped.has(match.venue_id)) {
+      grouped.set(match.venue_id, {
+        venueId: match.venue_id,
+        matches: 0,
+        wins: 0,
+        losses: 0
+      });
+    }
+
+    const current = grouped.get(match.venue_id);
+    current.matches += 1;
+    if (match.winner_team_id === teamId) {
+      current.wins += 1;
+    } else {
+      current.losses += 1;
+    }
+  }
+
+  return [...grouped.values()]
+    .map((entry) => ({
+      venue: toVenueLabel(context.venueById.get(entry.venueId)),
+      matches: entry.matches,
+      wins: entry.wins,
+      losses: entry.losses,
+      winPct: rate(entry.wins, entry.matches, 100)
+    }))
+    .filter((entry) => entry.venue && entry.matches > 0)
+    .sort((a, b) => b.wins - a.wins || b.matches - a.matches);
+}
+
+function buildTeamOutcomeProfile(context, { teamId, season }) {
+  const matches = applyMatchFilters(context.matches, { season });
+  const allTeams = context.teams;
+  
+  const profiles = new Map(allTeams.map(t => [t.team_id, {
+    chase: { matches: 0, wins: 0, losses: 0 },
+    defend: { matches: 0, wins: 0, losses: 0 }
+  }]));
+
+  for (const row of context.innings) {
+    const match = context.matchById.get(row.match_id);
+    if (!match || match.result_type !== "win") continue;
+    if (season && match.season !== season) continue;
+
+    const bTeamId = row.batting_team_id;
+    if (!profiles.has(bTeamId)) continue;
+    const current = profiles.get(bTeamId);
+
+    if (row.innings_number === 1) {
+      current.defend.matches += 1;
+      if (match.winner_team_id === bTeamId) current.defend.wins += 1;
+      else current.defend.losses += 1;
+    } else if (row.innings_number === 2) {
+      current.chase.matches += 1;
+      if (match.winner_team_id === bTeamId) current.chase.wins += 1;
+      else current.chase.losses += 1;
+    }
+  }
+
+  const phaseProfilesByTeam = new Map();
+  for (const t of allTeams) {
+    phaseProfilesByTeam.set(t.team_id, buildTeamPhaseProfile(context, { teamId: t.team_id, season }));
+  }
+
+  const teamProfile = profiles.get(teamId) || { chase: { wins: 0, losses: 0, matches: 0 }, defend: { wins: 0, losses: 0, matches: 0 } };
+
+  function getRank(phase, mode, metricKey, sortOrder = "desc") {
+    const ranks = allTeams.map(t => {
+      const p = phaseProfilesByTeam.get(t.team_id);
+      let metric = null;
+      if (p && p[mode]) {
+        const ph = p[mode].find(x => x.phase === phase);
+        if (ph) {
+           metric = ph[mode][metricKey];
+        }
+      }
+      return { id: t.team_id, name: t.team_name, value: metric || 0 };
+    });
+    
+    ranks.sort((a, b) => sortOrder === "desc" ? b.value - a.value : a.value - b.value);
+    const pos = ranks.findIndex(r => r.id === teamId);
+    
+    return {
+      rank: pos + 1,
+      of: ranks.length,
+      value: ranks[pos]?.value || 0
+    };
+  }
+
+  return {
+    chase: teamProfile.chase,
+    defend: teamProfile.defend,
+    ranks: {
+      powerplayBatting: getRank("powerplay", "batting", "strikeRate", "desc"),
+      middleOverCollapse: getRank("middle", "batting", "average", "asc"),
+      deathHitting: getRank("death", "batting", "strikeRate", "desc"),
+      powerplayWickets: getRank("powerplay", "bowling", "strikeRate", "asc"),
+      deathEconomy: getRank("death", "bowling", "economy", "asc")
+    }
+  };
+}
 export function createLocalPslRepository() {
   return {
     async getManifest() {
@@ -1529,6 +1637,8 @@ export function createLocalPslRepository() {
         .slice(0, 8);
 
       const phaseProfile = buildTeamPhaseProfile(context, { teamId, season });
+      const venues = buildTeamVenueRecord(context, { teamId, season });
+      const identity = buildTeamOutcomeProfile(context, { teamId, season });
 
       return {
         team: toTeamLabel(team),
@@ -1539,7 +1649,9 @@ export function createLocalPslRepository() {
           batting: battingLeaders,
           bowling: bowlingLeaders
         },
-        phaseProfile
+        phaseProfile,
+        venues,
+        identity
       };
     },
 

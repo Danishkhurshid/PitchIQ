@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PhaseTable } from "@/components/phase-table";
 import { RecentMatchList } from "@/components/recent-match-list";
 import { SeasonFilter } from "@/components/season-filter";
+import { TeamIdentityPanel } from "@/components/team-identity-panel";
 import { getCricketRepository } from "@/lib/server/cricket-repository";
 import { formatMetric } from "@/lib/format";
 import { normalizeSeasonParam, seasonLabel } from "@/lib/season";
@@ -80,6 +81,13 @@ export default async function TeamDetailPage({ params, searchParams }) {
       </section>
 
       <section className="content-grid">
+        <TeamIdentityPanel 
+          title="League comparisons" 
+          identity={team.identity} 
+        />
+      </section>
+
+      <section className="content-grid">
         <article className="surface surface-span-6">
           <div className="surface-header">
             <div>
@@ -151,7 +159,43 @@ export default async function TeamDetailPage({ params, searchParams }) {
       </section>
 
       <section className="content-grid">
-        <div className="surface surface-span-12">
+        <article className="surface surface-span-4">
+          <div className="surface-header">
+            <div>
+              <p className="kicker">Context records</p>
+              <h2>Best venues</h2>
+            </div>
+          </div>
+
+          <div className="feed-list compact">
+            {team.venues && team.venues.length > 0 ? (
+              team.venues.slice(0, 5).map((entry) => (
+                <Link
+                  key={entry.venue.id}
+                  className="feed-row"
+                  href={buildPath(`/venues/${entry.venue.id}`, { season: selectedSeason })}
+                >
+                  <div>
+                    <p className="feed-title">{entry.venue.name}</p>
+                    <p className="feed-meta">
+                      {entry.wins}W - {entry.losses}L
+                    </p>
+                  </div>
+                  <div className="feed-metric">
+                    <span>{formatMetric(entry.winPct)}%</span>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <div className="empty-state">
+                <p className="kicker">No data</p>
+                <strong>No venue records found.</strong>
+              </div>
+            )}
+          </div>
+        </article>
+
+        <div className="surface surface-span-8">
           <RecentMatchList
             title="Recent matches"
             items={team.recentMatches.map((match) => ({ match }))}

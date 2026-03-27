@@ -744,6 +744,40 @@ code {
   gap: 12px;
 }
 
+.matchup-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.matchup-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  gap: 12px;
+  padding: 0 16px;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+
+.matchup-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.matchup-row .metric {
+  text-align: left;
+  font-size: 0.96rem;
+}
+
 @media (max-width: 1024px) {
   .site-header,
   .hero-grid,

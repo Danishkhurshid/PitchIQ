@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { MatchupTable } from "@/components/matchup-table";
 import { PhaseTable } from "@/components/phase-table";
 import { PlayerFormPanel } from "@/components/player-form-panel";
 import { RecentMatchList } from "@/components/recent-match-list";
@@ -227,6 +228,67 @@ export default async function PlayerDetailPage({ params, searchParams }) {
           />
         </div>
       </section>
+
+      {player.career.batting.innings > 0 && (
+        <section className="content-grid">
+          <MatchupTable
+            title="Bowlers faced most often"
+            items={player.matchups.batting.bowlers.slice(0, 5)}
+            mode="batting"
+            type="bowler"
+            season={selectedSeason}
+          />
+          <MatchupTable
+            title="Batting vs opposition"
+            items={player.matchups.batting.opposition.slice(0, 5)}
+            mode="batting"
+            type="team"
+            season={selectedSeason}
+          />
+        </section>
+      )}
+
+      {player.career.bowling.innings > 0 && (
+        <section className="content-grid">
+          <MatchupTable
+            title="Batters faced most often"
+            items={player.matchups.bowling.batters.slice(0, 5)}
+            mode="bowling"
+            type="batter"
+            season={selectedSeason}
+          />
+          <MatchupTable
+            title="Bowling vs opposition"
+            items={player.matchups.bowling.opposition.slice(0, 5)}
+            mode="bowling"
+            type="team"
+            season={selectedSeason}
+          />
+        </section>
+      )}
+
+      {(player.career.batting.innings > 0 || player.career.bowling.innings > 0) && (
+        <section className="content-grid">
+          {player.career.batting.innings > 0 && (
+            <MatchupTable
+              title="Batting by venue"
+              items={player.matchups.batting.venues.slice(0, 5)}
+              mode="batting"
+              type="venue"
+              season={selectedSeason}
+            />
+          )}
+          {player.career.bowling.innings > 0 && (
+            <MatchupTable
+              title="Bowling by venue"
+              items={player.matchups.bowling.venues.slice(0, 5)}
+              mode="bowling"
+              type="venue"
+              season={selectedSeason}
+            />
+          )}
+        </section>
+      )}
 
       <section className="content-grid">
         <article className="surface surface-span-4">
