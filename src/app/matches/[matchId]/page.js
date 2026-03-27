@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { MatchWormChart } from "@/components/match-worm-chart";
 import { getCricketRepository } from "@/lib/server/cricket-repository";
 import { formatDate, formatMetric, formatOversFromBalls } from "@/lib/format";
 
@@ -18,7 +19,7 @@ export async function generateMetadata({ params }) {
 export default async function MatchDetailPage({ params }) {
   const { matchId } = await params;
   const repository = await getCricketRepository();
-  const payload = await repository.getMatch(matchId);
+  const payload = await repository.getMatch(matchId, { includeDeliveries: true });
 
   if (!payload) {
     notFound();
@@ -56,6 +57,10 @@ export default async function MatchDetailPage({ params }) {
             <strong>{payload.match.playerOfMatch[0]?.name || payload.match.playerOfMatch[0]?.player?.name || "NA"}</strong>
           </article>
         </div>
+      </section>
+
+      <section className="content-grid">
+        <MatchWormChart deliveries={payload.deliveries} innings={payload.innings} />
       </section>
 
       <section className="content-grid">
