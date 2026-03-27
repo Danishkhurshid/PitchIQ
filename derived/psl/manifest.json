@@ -1,0 +1,59 @@
+{
+  "competition": "PSL",
+  "date_range": {
+    "end": "2025-05-25",
+    "start": "2016-02-04"
+  },
+  "delivery_count": 73784,
+  "files": [
+    "teams.jsonl",
+    "players.jsonl",
+    "venues.jsonl",
+    "matches.jsonl",
+    "match_players.jsonl",
+    "innings.jsonl",
+    "powerplays.jsonl",
+    "deliveries.jsonl",
+    "wickets.jsonl",
+    "reviews.jsonl",
+    "replacements.jsonl",
+    "player_match_batting.jsonl",
+    "player_match_bowling.jsonl",
+    "player_phase_batting.jsonl",
+    "player_phase_bowling.jsonl"
+  ],
+  "generated_at": "2026-03-27T10:09:13.773046+00:00",
+  "innings_count": 633,
+  "input_dir": "/Users/danishkhurshidshah/Sites/psl_json/data/psl/raw",
+  "match_count": 314,
+  "match_file_count": 314,
+  "output_dir": "/Users/danishkhurshidshah/Sites/psl_json/derived/psl",
+  "player_count": 417,
+  "replacement_count": 19,
+  "review_count": 551,
+  "season_count": 11,
+  "seasons": [
+    "2015/16",
+    "2016/17",
+    "2017/18",
+    "2018/19",
+    "2019/20",
+    "2020/21",
+    "2021",
+    "2021/22",
+    "2022/23",
+    "2023/24",
+    "2025"
+  ],
+  "team_count": 6,
+  "teams": [
+    "Islamabad United",
+    "Karachi Kings",
+    "Lahore Qalandars",
+    "Multan Sultans",
+    "Peshawar Zalmi",
+    "Quetta Gladiators"
+  ],
+  "venue_count": 12,
+  "wicket_event_count": 3966
+}
