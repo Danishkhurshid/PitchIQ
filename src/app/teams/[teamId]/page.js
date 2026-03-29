@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PhaseTable } from "@/components/phase-table";
+import { PowerplayMasteryPanel } from "@/components/powerplay-mastery-panel";
 import { RecentMatchList } from "@/components/recent-match-list";
 import { SeasonFilter } from "@/components/season-filter";
 import { TeamIdentityPanel } from "@/components/team-identity-panel";
@@ -84,6 +85,15 @@ export default async function TeamDetailPage({ params, searchParams }) {
         <TeamIdentityPanel 
           title="League comparisons" 
           identity={team.identity} 
+        />
+      </section>
+
+      <section className="content-grid">
+        <PowerplayMasteryPanel 
+          title="Powerplay mastery"
+          identity={team.identity}
+          leaders={team.leaders}
+          season={selectedSeason}
         />
       </section>
 

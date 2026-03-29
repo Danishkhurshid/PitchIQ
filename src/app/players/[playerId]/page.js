@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { MatchupTable } from "@/components/matchup-table";
 import { PhaseTable } from "@/components/phase-table";
+import { BatterPacingPanel } from "@/components/batter-pacing-panel";
 import { PlayerFormPanel } from "@/components/player-form-panel";
 import { RecentMatchList } from "@/components/recent-match-list";
 import { SeasonFilter } from "@/components/season-filter";
@@ -226,6 +227,12 @@ export default async function PlayerDetailPage({ params, searchParams }) {
             items={player.phaseProfile.bowling}
             mode="bowling"
           />
+        </div>
+      </section>
+      
+      <section className="content-grid">
+        <div className="surface-span-12">
+          <BatterPacingPanel pacing={player.pacing} />
         </div>
       </section>
 

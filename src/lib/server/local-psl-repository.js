@@ -1491,6 +1491,62 @@ function buildTeamOutcomeProfile(context, { teamId, season }) {
     }
   };
 }
+function buildBatterPacingProfile(context, { playerId, season }) {
+  const allowedMatchIds = new Set(
+    applyMatchFilters(context.matches, { season }).map((match) => match.match_id)
+  );
+
+  const buckets = [
+    { label: "1-10", min: 1, max: 10, runs: 0, balls: 0, outs: 0 },
+    { label: "11-20", min: 11, max: 20, runs: 0, balls: 0, outs: 0 },
+    { label: "21-30", min: 21, max: 30, runs: 0, balls: 0, outs: 0 },
+    { label: "31+", min: 31, max: Infinity, runs: 0, balls: 0, outs: 0 }
+  ];
+
+  const inningsState = new Map();
+
+  for (const delivery of context.deliveries) {
+    if (!allowedMatchIds.has(delivery.match_id)) continue;
+    if (delivery.striker_player_id !== playerId) continue;
+
+    const inningsKey = `${delivery.match_id}:${delivery.innings_number}`;
+    let ballsFaced = inningsState.get(inningsKey) || 0;
+
+    if (delivery.wides === 0) {
+      ballsFaced += 1;
+      inningsState.set(inningsKey, ballsFaced);
+    }
+
+    const effectiveBallFaced = Math.max(1, ballsFaced);
+    const bucket = buckets.find(b => effectiveBallFaced >= b.min && effectiveBallFaced <= b.max);
+
+    if (bucket) {
+      bucket.runs += delivery.batter_runs;
+      if (delivery.wides === 0) bucket.balls += 1;
+    }
+  }
+
+  for (const wicket of context.wickets) {
+    if (!allowedMatchIds.has(wicket.match_id) || wicket.player_out_id !== playerId) continue;
+    const inningsKey = `${wicket.match_id}:${wicket.innings_number}`;
+    const ballsFaced = inningsState.get(inningsKey) || 0;
+    const effectiveBallFaced = Math.max(1, ballsFaced);
+    const bucket = buckets.find(b => effectiveBallFaced >= b.min && effectiveBallFaced <= b.max);
+    if (bucket) {
+      bucket.outs += 1;
+    }
+  }
+
+  return buckets.map(b => ({
+    label: b.label,
+    runs: b.runs,
+    balls: b.balls,
+    outs: b.outs,
+    strikeRate: b.balls > 0 ? (b.runs / b.balls) * 100 : 0,
+    average: b.outs > 0 ? b.runs / b.outs : null
+  }));
+}
+
 export function createLocalPslRepository() {
   return {
     async getManifest() {
@@ -1640,6 +1696,36 @@ export function createLocalPslRepository() {
       const venues = buildTeamVenueRecord(context, { teamId, season });
       const identity = buildTeamOutcomeProfile(context, { teamId, season });
 
+      const powerplayBattingLeaders = aggregatePlayerBattingRows(
+        context.playerPhaseBatting.filter(
+          (row) =>
+            row.team_id === teamId &&
+            row.phase === "powerplay" &&
+            (!season || row.season === season)
+        )
+      )
+        .map((row) => ({
+          player: toPlayerLabel(context.playerById.get(row.playerId)),
+          batting: row.batting
+        }))
+        .sort((a, b) => b.batting.runs - a.batting.runs)
+        .slice(0, 3);
+
+      const powerplayBowlingLeaders = aggregatePlayerBowlingRows(
+        context.playerPhaseBowling.filter(
+          (row) =>
+            row.team_id === teamId &&
+            row.phase === "powerplay" &&
+            (!season || row.season === season)
+        )
+      )
+        .map((row) => ({
+          player: toPlayerLabel(context.playerById.get(row.playerId)),
+          bowling: row.bowling
+        }))
+        .sort((a, b) => b.bowling.wickets - a.bowling.wickets)
+        .slice(0, 3);
+
       return {
         team: toTeamLabel(team),
         season: season || "all",
@@ -1647,13 +1733,18 @@ export function createLocalPslRepository() {
         recentMatches: matches.slice(0, Number(options.matchLimit) || 10),
         leaders: {
           batting: battingLeaders,
-          bowling: bowlingLeaders
+          bowling: bowlingLeaders,
+          powerplay: {
+            batting: powerplayBattingLeaders,
+            bowling: powerplayBowlingLeaders
+          }
         },
         phaseProfile,
         venues,
         identity
       };
     },
+
 
     async listPlayers(options = {}) {
       const context = await getContext();
@@ -1910,9 +2001,14 @@ export function createLocalPslRepository() {
           batting: aggregatePhaseBattingRows(phaseBattingRows),
           bowling: aggregatePhaseBowlingRows(phaseBowlingRows)
         },
+        pacing: buildBatterPacingProfile(context, {
+          playerId,
+          season
+        }),
         recentMatches
       };
     },
+
 
     async listMatches(options = {}) {
       const context = await getContext();
