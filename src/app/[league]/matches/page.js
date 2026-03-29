@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { SeasonFilter } from "@/components/season-filter";
+import { LeagueFilter } from "@/components/league-filter";
 import { getCricketRepository } from "@/lib/server/cricket-repository";
 import { formatDate, formatNumber } from "@/lib/format";
 import { normalizeSeasonParam, seasonLabel } from "@/lib/season";
@@ -10,8 +11,9 @@ export const metadata = {
   title: "Matches | PitchIQ"
 };
 
-export default async function MatchesPage({ searchParams }) {
-  const repository = await getCricketRepository();
+export default async function MatchesPage({ params, searchParams }) {
+  const { league } = await params;
+  const repository = await getCricketRepository(league);
   const resolvedSearchParams = await searchParams;
   const manifest = await repository.getManifest();
   const selectedSeason = normalizeSeasonParam(
@@ -25,7 +27,8 @@ export default async function MatchesPage({ searchParams }) {
 
   return (
     <main className="page-shell">
-      <SeasonFilter pathname="/matches" seasons={manifest.seasons} currentSeason={selectedSeason} />
+      <LeagueFilter currentLeague={league} currentSeason={selectedSeason} />
+      <SeasonFilter pathname={`/${league}/matches`} seasons={manifest.seasons} currentSeason={selectedSeason} />
 
       <section className="page-headline">
         <p className="kicker">Matches</p>
@@ -41,7 +44,7 @@ export default async function MatchesPage({ searchParams }) {
         <div className="surface-header">
           <div>
             <p className="kicker">Archive</p>
-            <h2>Full PSL match log</h2>
+            <h2>Full {league.toUpperCase()} match log</h2>
           </div>
           <span className="directory-count">{formatNumber(matches.length)} matches listed</span>
         </div>
@@ -55,7 +58,7 @@ export default async function MatchesPage({ searchParams }) {
             <Link
               key={match.matchId}
               className="feed-row"
-              href={buildPath(`/matches/${match.matchId}`, { season: selectedSeason })}
+              href={buildPath(`/${league}/matches/${match.matchId}`, { season: selectedSeason })}
             >
               <div>
                 <p className="feed-title">
@@ -72,7 +75,6 @@ export default async function MatchesPage({ searchParams }) {
           ))}
         </div>
       </section>
-
     </main>
   );
 }

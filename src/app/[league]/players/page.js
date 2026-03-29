@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { SeasonFilter } from "@/components/season-filter";
+import { LeagueFilter } from "@/components/league-filter";
 import { getCricketRepository } from "@/lib/server/cricket-repository";
 import { formatMetric, formatNumber } from "@/lib/format";
 import { normalizeSeasonParam, seasonLabel } from "@/lib/season";
@@ -18,8 +19,9 @@ function normalizeSearchValue(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export default async function PlayersPage({ searchParams }) {
-  const repository = await getCricketRepository();
+export default async function PlayersPage({ params, searchParams }) {
+  const { league } = await params;
+  const repository = await getCricketRepository(league);
   const resolvedSearchParams = await searchParams;
   const manifest = await repository.getManifest();
   const selectedSeason = normalizeSeasonParam(
@@ -60,8 +62,9 @@ export default async function PlayersPage({ searchParams }) {
 
   return (
     <main className="page-shell">
+      <LeagueFilter currentLeague={league} currentSeason={selectedSeason} />
       <SeasonFilter
-        pathname="/players"
+        pathname={`/${league}/players`}
         seasons={manifest.seasons}
         currentSeason={selectedSeason}
         extraQuery={searchQuery ? { search: searchQuery } : {}}
@@ -81,10 +84,10 @@ export default async function PlayersPage({ searchParams }) {
         <div className="surface-header">
           <div>
             <p className="kicker">Directory</p>
-            <h2>Search the full PSL player pool</h2>
+            <h2>Search the full {league.toUpperCase()} player pool</h2>
           </div>
           {searchQuery ? (
-            <Link className="text-link" href={buildPath("/players", { season: selectedSeason })}>
+            <Link className="text-link" href={buildPath(`/${league}/players`, { season: selectedSeason })}>
               Clear search
             </Link>
           ) : (
@@ -92,7 +95,7 @@ export default async function PlayersPage({ searchParams }) {
           )}
         </div>
 
-        <form className="directory-search" action="/players">
+        <form className="directory-search" action={`/${league}/players`}>
           {selectedSeason !== "all" ? (
             <input type="hidden" name="season" value={selectedSeason} />
           ) : null}
@@ -126,7 +129,7 @@ export default async function PlayersPage({ searchParams }) {
               <Link
                 key={entry.player.id}
                 className="table-row"
-                href={buildPath(`/players/${entry.player.id}`, { season: selectedSeason })}
+                href={buildPath(`/${league}/players/${entry.player.id}`, { season: selectedSeason })}
               >
                 <div className="table-rank">{index + 1}</div>
                 <div className="table-primary">
@@ -172,7 +175,7 @@ export default async function PlayersPage({ searchParams }) {
               <Link
                 key={entry.player.id}
                 className="leader-row"
-                href={buildPath(`/players/${entry.player.id}`, { season: selectedSeason })}
+                href={buildPath(`/${league}/players/${entry.player.id}`, { season: selectedSeason })}
               >
                 <span className="leader-rank">0{index + 1}</span>
                 <div className="leader-copy">
@@ -199,7 +202,7 @@ export default async function PlayersPage({ searchParams }) {
               <Link
                 key={entry.player.id}
                 className="leader-row"
-                href={buildPath(`/players/${entry.player.id}`, { season: selectedSeason })}
+                href={buildPath(`/${league}/players/${entry.player.id}`, { season: selectedSeason })}
               >
                 <span className="leader-rank">0{index + 1}</span>
                 <div className="leader-copy">

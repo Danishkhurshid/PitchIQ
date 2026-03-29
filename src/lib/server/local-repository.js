@@ -1,6 +1,6 @@
 import { loadJsonl, loadManifest } from "@/lib/server/jsonl-store";
 
-let contextPromise;
+
 
 function createBattingAccumulator() {
   return {
@@ -1310,7 +1310,7 @@ function buildVenueSummaries(context, filters) {
     });
 }
 
-async function buildContext() {
+async function buildContext(league) {
   const [
     manifest,
     teams,
@@ -1328,21 +1328,21 @@ async function buildContext() {
     playerPhaseBatting,
     playerPhaseBowling
   ] = await Promise.all([
-    loadManifest(),
-    loadJsonl("teams.jsonl"),
-    loadJsonl("players.jsonl"),
-    loadJsonl("venues.jsonl"),
-    loadJsonl("matches.jsonl"),
-    loadJsonl("match_players.jsonl"),
-    loadJsonl("innings.jsonl"),
-    loadJsonl("deliveries.jsonl"),
-    loadJsonl("wickets.jsonl"),
-    loadJsonl("reviews.jsonl"),
-    loadJsonl("replacements.jsonl"),
-    loadJsonl("player_match_batting.jsonl"),
-    loadJsonl("player_match_bowling.jsonl"),
-    loadJsonl("player_phase_batting.jsonl"),
-    loadJsonl("player_phase_bowling.jsonl")
+    loadManifest(league),
+    loadJsonl(league, "teams.jsonl"),
+    loadJsonl(league, "players.jsonl"),
+    loadJsonl(league, "venues.jsonl"),
+    loadJsonl(league, "matches.jsonl"),
+    loadJsonl(league, "match_players.jsonl"),
+    loadJsonl(league, "innings.jsonl"),
+    loadJsonl(league, "deliveries.jsonl"),
+    loadJsonl(league, "wickets.jsonl"),
+    loadJsonl(league, "reviews.jsonl"),
+    loadJsonl(league, "replacements.jsonl"),
+    loadJsonl(league, "player_match_batting.jsonl"),
+    loadJsonl(league, "player_match_bowling.jsonl"),
+    loadJsonl(league, "player_phase_batting.jsonl"),
+    loadJsonl(league, "player_phase_bowling.jsonl")
   ]);
 
   return {
@@ -1375,13 +1375,7 @@ async function buildContext() {
   };
 }
 
-async function getContext() {
-  if (!contextPromise) {
-    contextPromise = buildContext();
-  }
 
-  return contextPromise;
-}
 function buildTeamVenueRecord(context, { teamId, season }) {
   const grouped = new Map();
   for (const match of context.matches) {
@@ -1547,11 +1541,81 @@ function buildBatterPacingProfile(context, { playerId, season }) {
   }));
 }
 
-export function createLocalPslRepository() {
+export function createLocalRepository(league) {
+  let contextPromise;
+
+  async function getContext() {
+    if (!contextPromise) {
+      contextPromise = buildContext(league);
+    }
+
+    return contextPromise;
+  }
+
   return {
     async getManifest() {
       const context = await getContext();
       return context.manifest;
+    },
+
+    async getLiveMatchUpdate() {
+      const context = await getContext();
+      const latestMatch = context.matches[0];
+      if (!latestMatch) return null;
+
+      const matchId = latestMatch.match_id;
+      const matchInnings = context.innings
+        .filter((i) => i.match_id === matchId)
+        .sort((a, b) => a.innings_number - b.innings_number);
+      
+      const currentInnings = matchInnings[matchInnings.length - 1];
+      const matchDeliveries = context.deliveries
+        .filter((d) => d.match_id === matchId)
+        .sort((a, b) => a.innings_ball_index - b.innings_ball_index);
+      
+      const currentInningsDeliveries = matchDeliveries.filter(d => d.innings_number === currentInnings.innings_number);
+      const recentDeliveries = currentInningsDeliveries.slice(-12).reverse();
+      
+      const wicketEvents = context.wickets
+        .filter(w => w.match_id === matchId)
+        .map(w => ({
+          type: "wicket",
+          ball: w.ball_label,
+          innings: w.innings_number,
+          playerOut: toPlayerLabel(context.playerById.get(w.player_out_id)),
+          bowler: toPlayerLabel(context.playerById.get(w.bowler_player_id)),
+          kind: w.dismissal_kind
+        }))
+        .reverse();
+
+      return {
+        match: decorateMatch(latestMatch, context),
+        isComplete: latestMatch.result_type !== null,
+        resultLabel: latestMatch.result_type ? decorateMatch(latestMatch, context).result.label : null,
+        innings: matchInnings.map(i => ({
+          number: i.innings_number,
+          battingTeam: toTeamLabel(context.teamById.get(i.batting_team_id)),
+          runs: i.total_runs,
+          wickets: i.total_wickets,
+          overs: i.overs_bowled,
+          target: i.target_runs
+        })),
+        currentInnings: {
+          number: currentInnings.innings_number,
+          battingTeam: toTeamLabel(context.teamById.get(currentInnings.batting_team_id)),
+          runs: currentInnings.total_runs,
+          wickets: currentInnings.total_wickets,
+          overs: currentInnings.overs_bowled,
+          lastBalls: recentDeliveries.map(d => ({
+            ball: d.ball_label,
+            runs: d.total_runs,
+            isWicket: d.wicket_count > 0,
+            isBoundary: d.is_boundary,
+            batterRuns: d.batter_runs
+          }))
+        },
+        events: wicketEvents.slice(0, 5)
+      };
     },
 
     async listVenues(options = {}) {

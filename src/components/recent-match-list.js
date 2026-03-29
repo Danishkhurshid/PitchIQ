@@ -3,7 +3,7 @@ import Link from "next/link";
 import { formatDate, formatMetric } from "@/lib/format";
 import { buildPath } from "@/lib/url";
 
-export function RecentMatchList({ title, items, showStatline = false, season }) {
+export function RecentMatchList({ title, items, showStatline = false, season, leaguePrefix = "" }) {
   return (
     <div>
       <div className="surface-header">
@@ -18,7 +18,7 @@ export function RecentMatchList({ title, items, showStatline = false, season }) 
           <Link
             key={item.match.matchId}
             className="feed-row"
-            href={buildPath(`/matches/${item.match.matchId}`, { season })}
+            href={buildPath(`${leaguePrefix}/matches/${item.match.matchId}`, { season })}
           >
             <div>
               <p className="feed-title">

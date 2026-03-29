@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 
 import { MatchWormChart } from "@/components/match-worm-chart";
 import { getCricketRepository } from "@/lib/server/cricket-repository";
 import { formatDate, formatMetric, formatOversFromBalls } from "@/lib/format";
+import { buildPath } from "@/lib/url";
 
 export async function generateMetadata({ params }) {
-  const { matchId } = await params;
-  const repository = await getCricketRepository();
+  const { matchId, league } = await params;
+  const repository = await getCricketRepository(league);
   const match = await repository.getMatch(matchId);
 
   return {
@@ -17,8 +19,8 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function MatchDetailPage({ params }) {
-  const { matchId } = await params;
-  const repository = await getCricketRepository();
+  const { matchId, league } = await params;
+  const repository = await getCricketRepository(league);
   const payload = await repository.getMatch(matchId, { includeDeliveries: true });
 
   if (!payload) {
@@ -31,18 +33,26 @@ export default async function MatchDetailPage({ params }) {
         <div className="detail-copy">
           <p className="kicker">Match centre</p>
           <h1>
-            {payload.match.teams.home?.name} vs {payload.match.teams.away?.name}
+            <nobr>{payload.match.teams.home?.name}</nobr> vs <nobr>{payload.match.teams.away?.name}</nobr>
           </h1>
           <p className="page-copy">
             {payload.match.stage || "League match"} · {formatDate(payload.match.matchDate)} ·{" "}
-            {payload.match.venue?.venue_name}
+            <Link className="text-link" href={buildPath(`/${league}/venues/${payload.match.venue?.venue_id}`)}>
+              {payload.match.venue?.venue_name}
+            </Link>
           </p>
         </div>
 
         <div className="insight-stack">
           <article className="insight-card">
             <p className="insight-label">Winner</p>
-            <strong>{payload.match.result.winner?.name || payload.match.result.label || "No result"}</strong>
+            <strong>
+              {payload.match.result.winner?.id ? (
+                <Link href={buildPath(`/${league}/teams/${payload.match.result.winner.id}`)}>
+                   {payload.match.result.winner.name}
+                </Link>
+              ) : payload.match.result.label || "No result"}
+            </strong>
           </article>
           <article className="insight-card">
             <p className="insight-label">Margin</p>
@@ -54,7 +64,13 @@ export default async function MatchDetailPage({ params }) {
           </article>
           <article className="insight-card">
             <p className="insight-label">Player of the match</p>
-            <strong>{payload.match.playerOfMatch[0]?.name || payload.match.playerOfMatch[0]?.player?.name || "NA"}</strong>
+            <strong>
+              {payload.match.playerOfMatch[0]?.player?.id ? (
+                <Link href={buildPath(`/${league}/players/${payload.match.playerOfMatch[0].player.id}`)}>
+                  {payload.match.playerOfMatch[0].player.name}
+                </Link>
+              ) : payload.match.playerOfMatch[0]?.name || "NA"}
+            </strong>
           </article>
         </div>
       </section>
@@ -77,7 +93,11 @@ export default async function MatchDetailPage({ params }) {
               <div key={innings.inningsNumber} className="profile-card passive">
                 <div className="profile-topline">
                   <p className="profile-eyebrow">Innings {innings.inningsNumber}</p>
-                  <h2>{innings.battingTeam?.name}</h2>
+                  <h2>
+                    <Link href={buildPath(`/${league}/teams/${innings.battingTeam?.id}`)}>
+                       {innings.battingTeam?.name}
+                    </Link>
+                  </h2>
                 </div>
                 <div className="profile-metrics">
                   <div>
@@ -92,7 +112,11 @@ export default async function MatchDetailPage({ params }) {
                   </div>
                   <div>
                     <span>Opponent</span>
-                    <strong>{innings.bowlingTeam?.name}</strong>
+                    <strong>
+                      <Link href={buildPath(`/${league}/teams/${innings.bowlingTeam?.id}`)}>
+                         {innings.bowlingTeam?.name}
+                      </Link>
+                    </strong>
                   </div>
                   <div>
                     <span>Target</span>
@@ -117,8 +141,16 @@ export default async function MatchDetailPage({ params }) {
             {payload.scorecards.batting.slice(0, 10).map((entry) => (
               <div key={`${entry.player.id}-${entry.team.id}`} className="feed-row">
                 <div>
-                  <p className="feed-title">{entry.player.name}</p>
-                  <p className="feed-meta">{entry.team.name}</p>
+                  <p className="feed-title">
+                    <Link href={buildPath(`/${league}/players/${entry.player.id}`)}>
+                      {entry.player.name}
+                    </Link>
+                  </p>
+                  <p className="feed-meta">
+                    <Link href={buildPath(`/${league}/teams/${entry.team.id}`)}>
+                       {entry.team.name}
+                    </Link>
+                  </p>
                 </div>
                 <div className="feed-metric">
                   <span>
@@ -142,8 +174,16 @@ export default async function MatchDetailPage({ params }) {
             {payload.scorecards.bowling.slice(0, 10).map((entry) => (
               <div key={`${entry.player.id}-${entry.team.id}`} className="feed-row">
                 <div>
-                  <p className="feed-title">{entry.player.name}</p>
-                  <p className="feed-meta">{entry.team.name}</p>
+                  <p className="feed-title">
+                    <Link href={buildPath(`/${league}/players/${entry.player.id}`)}>
+                      {entry.player.name}
+                    </Link>
+                  </p>
+                  <p className="feed-meta">
+                    <Link href={buildPath(`/${league}/teams/${entry.team.id}`)}>
+                       {entry.team.name}
+                    </Link>
+                  </p>
                 </div>
                 <div className="feed-metric">
                   <span>
@@ -170,10 +210,10 @@ export default async function MatchDetailPage({ params }) {
               <div key={`${entry.inningsNumber}-${entry.ball}-${entry.playerOut.id}`} className="feed-row">
                 <div>
                   <p className="feed-title">
-                    {entry.ball} · {entry.playerOut.name}
+                    {entry.ball} · <Link href={buildPath(`/${league}/players/${entry.playerOut.id}`)}>{entry.playerOut.name}</Link>
                   </p>
                   <p className="feed-meta">
-                    {entry.dismissalKind} by {entry.bowler?.name || "unknown"}
+                    {entry.dismissalKind} by {entry.bowler?.id ? <Link href={buildPath(`/${league}/players/${entry.bowler.id}`)}>{entry.bowler.name}</Link> : entry.bowler?.name || "unknown"}
                   </p>
                 </div>
                 <div className="feed-metric">
@@ -208,7 +248,7 @@ export default async function MatchDetailPage({ params }) {
                     Review · {entry.ball}
                   </p>
                   <p className="feed-meta">
-                    {entry.team?.name} · {entry.decision}
+                    {entry.team?.id ? <Link href={buildPath(`/${league}/teams/${entry.team.id}`)}>{entry.team.name}</Link> : entry.team?.name} · {entry.decision}
                   </p>
                 </div>
               </div>
@@ -218,10 +258,10 @@ export default async function MatchDetailPage({ params }) {
               <div key={`replacement-${entry.inningsNumber}-${entry.ball}-${entry.playerIn?.id || "na"}`} className="feed-row">
                 <div>
                   <p className="feed-title">
-                    Replacement · {entry.playerIn?.name}
+                    Replacement · {entry.playerIn?.id ? <Link href={buildPath(`/${league}/players/${entry.playerIn.id}`)}>{entry.playerIn.name}</Link> : entry.playerIn?.name}
                   </p>
                   <p className="feed-meta">
-                    {entry.team?.name} · {entry.reason || entry.scope}
+                    {entry.team?.id ? <Link href={buildPath(`/${league}/teams/${entry.team.id}`)}>{entry.team.name}</Link> : entry.team?.name} · {entry.reason || entry.scope}
                   </p>
                 </div>
               </div>

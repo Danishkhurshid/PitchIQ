@@ -78,8 +78,8 @@ function formatPhaseName(phase) {
 }
 
 export async function generateMetadata({ params, searchParams }) {
-  const { playerId } = await params;
-  const repository = await getCricketRepository();
+  const { playerId, league } = await params;
+  const repository = await getCricketRepository(league);
   const resolvedSearchParams = await searchParams;
   const manifest = await repository.getManifest();
   const selectedSeason = normalizeSeasonParam(
@@ -96,8 +96,8 @@ export async function generateMetadata({ params, searchParams }) {
 }
 
 export default async function PlayerDetailPage({ params, searchParams }) {
-  const { playerId } = await params;
-  const repository = await getCricketRepository();
+  const { playerId, league } = await params;
+  const repository = await getCricketRepository(league);
   const resolvedSearchParams = await searchParams;
   const manifest = await repository.getManifest();
   const selectedSeason = normalizeSeasonParam(
@@ -121,7 +121,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
   return (
     <main className="page-shell">
       <SeasonFilter
-        pathname={`/players/${playerId}`}
+        pathname={`/${league}/players/${playerId}`}
         seasons={manifest.seasons}
         currentSeason={selectedSeason}
       />
@@ -244,6 +244,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
             mode="batting"
             type="bowler"
             season={selectedSeason}
+            leaguePrefix={`/${league}`}
           />
           <MatchupTable
             title="Batting vs opposition"
@@ -251,6 +252,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
             mode="batting"
             type="team"
             season={selectedSeason}
+            leaguePrefix={`/${league}`}
           />
         </section>
       )}
@@ -263,6 +265,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
             mode="bowling"
             type="batter"
             season={selectedSeason}
+            leaguePrefix={`/${league}`}
           />
           <MatchupTable
             title="Bowling vs opposition"
@@ -270,6 +273,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
             mode="bowling"
             type="team"
             season={selectedSeason}
+            leaguePrefix={`/${league}`}
           />
         </section>
       )}
@@ -283,6 +287,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
               mode="batting"
               type="venue"
               season={selectedSeason}
+              leaguePrefix={`/${league}`}
             />
           )}
           {player.career.bowling.innings > 0 && (
@@ -292,6 +297,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
               mode="bowling"
               type="venue"
               season={selectedSeason}
+              leaguePrefix={`/${league}`}
             />
           )}
         </section>
@@ -410,6 +416,7 @@ export default async function PlayerDetailPage({ params, searchParams }) {
             items={player.recentMatches}
             showStatline
             season={selectedSeason}
+            leaguePrefix={`/${league}`}
           />
         </div>
       </section>

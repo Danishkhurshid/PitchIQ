@@ -1,11 +1,13 @@
-import { createLocalPslRepository } from "@/lib/server/local-psl-repository";
+import { createLocalRepository } from "@/lib/server/local-repository";
 
-let repositoryPromise;
+const repositories = new Map();
 
-export function getCricketRepository() {
-  if (!repositoryPromise) {
-    repositoryPromise = Promise.resolve(createLocalPslRepository());
+export function getCricketRepository(league = "psl") {
+  const normalizedLeague = league.toLowerCase();
+  
+  if (!repositories.has(normalizedLeague)) {
+    repositories.set(normalizedLeague, Promise.resolve(createLocalRepository(normalizedLeague)));
   }
 
-  return repositoryPromise;
+  return repositories.get(normalizedLeague);
 }

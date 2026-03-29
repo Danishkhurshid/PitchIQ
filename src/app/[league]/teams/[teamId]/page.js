@@ -12,8 +12,8 @@ import { normalizeSeasonParam, seasonLabel } from "@/lib/season";
 import { buildPath } from "@/lib/url";
 
 export async function generateMetadata({ params, searchParams }) {
-  const { teamId } = await params;
-  const repository = await getCricketRepository();
+  const { teamId, league } = await params;
+  const repository = await getCricketRepository(league);
   const resolvedSearchParams = await searchParams;
   const manifest = await repository.getManifest();
   const selectedSeason = normalizeSeasonParam(
@@ -30,8 +30,8 @@ export async function generateMetadata({ params, searchParams }) {
 }
 
 export default async function TeamDetailPage({ params, searchParams }) {
-  const { teamId } = await params;
-  const repository = await getCricketRepository();
+  const { teamId, league } = await params;
+  const repository = await getCricketRepository(league);
   const resolvedSearchParams = await searchParams;
   const manifest = await repository.getManifest();
   const selectedSeason = normalizeSeasonParam(
@@ -50,7 +50,7 @@ export default async function TeamDetailPage({ params, searchParams }) {
   return (
     <main className="page-shell">
       <SeasonFilter
-        pathname={`/teams/${teamId}`}
+        pathname={`/${league}/teams/${teamId}`}
         seasons={manifest.seasons}
         currentSeason={selectedSeason}
       />
@@ -110,7 +110,7 @@ export default async function TeamDetailPage({ params, searchParams }) {
               <Link
                 key={entry.player.id}
                 className="leader-row"
-                href={buildPath(`/players/${entry.player.id}`, { season: selectedSeason })}
+                href={buildPath(`/${league}/players/${entry.player.id}`, { season: selectedSeason })}
               >
                 <span className="leader-rank">0{index + 1}</span>
                 <div className="leader-copy">
@@ -136,7 +136,7 @@ export default async function TeamDetailPage({ params, searchParams }) {
               <Link
                 key={entry.player.id}
                 className="leader-row"
-                href={buildPath(`/players/${entry.player.id}`, { season: selectedSeason })}
+                href={buildPath(`/${league}/players/${entry.player.id}`, { season: selectedSeason })}
               >
                 <span className="leader-rank">0{index + 1}</span>
                 <div className="leader-copy">
@@ -183,7 +183,7 @@ export default async function TeamDetailPage({ params, searchParams }) {
                 <Link
                   key={entry.venue.id}
                   className="feed-row"
-                  href={buildPath(`/venues/${entry.venue.id}`, { season: selectedSeason })}
+                  href={buildPath(`/${league}/venues/${entry.venue.id}`, { season: selectedSeason })}
                 >
                   <div>
                     <p className="feed-title">{entry.venue.name}</p>
@@ -210,6 +210,7 @@ export default async function TeamDetailPage({ params, searchParams }) {
             title="Recent matches"
             items={team.recentMatches.map((match) => ({ match }))}
             season={selectedSeason}
+            leaguePrefix={`/${league}`}
           />
         </div>
       </section>

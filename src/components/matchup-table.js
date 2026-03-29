@@ -2,7 +2,7 @@ import Link from "next/link";
 import { formatMetric, formatOversFromBalls } from "@/lib/format";
 import { buildPath } from "@/lib/url";
 
-export function MatchupTable({ title, items, mode, type, season }) {
+export function MatchupTable({ title, items, mode, type, season, leaguePrefix = "" }) {
   const isBatting = mode === "batting";
 
   if (!items || items.length === 0) {
@@ -61,7 +61,7 @@ export function MatchupTable({ title, items, mode, type, season }) {
           return (
             <div key={key} className="matchup-row">
               <Link
-                href={buildPath(`/${linkBase}/${key}`, { season })}
+                href={buildPath(`${leaguePrefix}/${linkBase}/${key}`, { season })}
                 className="table-primary"
               >
                 <strong>{entity.name}</strong>

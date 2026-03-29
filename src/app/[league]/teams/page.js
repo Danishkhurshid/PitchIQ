@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { SeasonFilter } from "@/components/season-filter";
+import { LeagueFilter } from "@/components/league-filter";
 import { getCricketRepository } from "@/lib/server/cricket-repository";
 import { formatMetric } from "@/lib/format";
 import { normalizeSeasonParam, seasonLabel } from "@/lib/season";
@@ -10,8 +11,9 @@ export const metadata = {
   title: "Teams | PitchIQ"
 };
 
-export default async function TeamsPage({ searchParams }) {
-  const repository = await getCricketRepository();
+export default async function TeamsPage({ params, searchParams }) {
+  const { league } = await params;
+  const repository = await getCricketRepository(league);
   const resolvedSearchParams = await searchParams;
   const manifest = await repository.getManifest();
   const selectedSeason = normalizeSeasonParam(
@@ -24,7 +26,8 @@ export default async function TeamsPage({ searchParams }) {
 
   return (
     <main className="page-shell">
-      <SeasonFilter pathname="/teams" seasons={manifest.seasons} currentSeason={selectedSeason} />
+      <LeagueFilter currentLeague={league} currentSeason={selectedSeason} />
+      <SeasonFilter pathname={`/${league}/teams`} seasons={manifest.seasons} currentSeason={selectedSeason} />
 
       <section className="page-headline">
         <p className="kicker">Teams</p>
@@ -40,7 +43,7 @@ export default async function TeamsPage({ searchParams }) {
           <Link
             key={entry.team.id}
             className="profile-card"
-            href={buildPath(`/teams/${entry.team.id}`, { season: selectedSeason })}
+            href={buildPath(`/${league}/teams/${entry.team.id}`, { season: selectedSeason })}
           >
             <div className="profile-topline">
               <p className="profile-eyebrow">Rank #{index + 1}</p>
@@ -51,7 +54,7 @@ export default async function TeamsPage({ searchParams }) {
               <div>
                 <span>Record</span>
                 <strong>
-                  {entry.summary.wins}-{entry.summary.losses}
+                   {entry.summary.wins}-{entry.summary.losses}
                 </strong>
               </div>
               <div>

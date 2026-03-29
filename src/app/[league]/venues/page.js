@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { SeasonFilter } from "@/components/season-filter";
+import { LeagueFilter } from "@/components/league-filter";
 import { getCricketRepository } from "@/lib/server/cricket-repository";
 import { formatMetric, formatNumber } from "@/lib/format";
 import { normalizeSeasonParam, seasonLabel } from "@/lib/season";
@@ -14,8 +15,9 @@ function venueEyebrow(venue) {
   return venue.city || "Venue profile";
 }
 
-export default async function VenuesPage({ searchParams }) {
-  const repository = await getCricketRepository();
+export default async function VenuesPage({ params, searchParams }) {
+  const { league } = await params;
+  const repository = await getCricketRepository(league);
   const resolvedSearchParams = await searchParams;
   const manifest = await repository.getManifest();
   const selectedSeason = normalizeSeasonParam(
@@ -28,7 +30,8 @@ export default async function VenuesPage({ searchParams }) {
 
   return (
     <main className="page-shell">
-      <SeasonFilter pathname="/venues" seasons={manifest.seasons} currentSeason={selectedSeason} />
+      <LeagueFilter currentLeague={league} currentSeason={selectedSeason} />
+      <SeasonFilter pathname={`/${league}/venues`} seasons={manifest.seasons} currentSeason={selectedSeason} />
 
       <section className="page-headline">
         <p className="kicker">Venues</p>
@@ -45,7 +48,7 @@ export default async function VenuesPage({ searchParams }) {
           <Link
             key={entry.venue.id}
             className="profile-card"
-            href={buildPath(`/venues/${entry.venue.id}`, { season: selectedSeason })}
+            href={buildPath(`/${league}/venues/${entry.venue.id}`, { season: selectedSeason })}
           >
             <div className="profile-topline">
               <p className="profile-eyebrow">{venueEyebrow(entry.venue)}</p>
